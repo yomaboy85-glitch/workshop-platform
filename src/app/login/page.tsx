@@ -27,12 +27,9 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const isAdmin = adminSecret === (process.env.NEXT_PUBLIC_ADMIN_SECRET || 'workshop-admin-2024');
+    const isAdmin = adminSecret === (process.env.NEXT_PUBLIC_ADMIN_SECRET || 'workshop2024');
 
-    const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    const { data: authData, error: authErr } = await supabase.auth.signUp({ email, password });
 
     if (authErr || !authData.user) {
       setError(authErr?.message || '회원가입에 실패했습니다.');
@@ -53,6 +50,7 @@ export default function LoginPage() {
       return;
     }
 
+    setLoading(false);
     router.push(isAdmin ? '/admin' : '/');
   };
 
@@ -65,29 +63,38 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const { data, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const { data, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (loginErr) {
-      setError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
-      setLoading(false);
-      return;
-    }
+      if (loginErr || !data.user) {
+        setError('로그인 실패: ' + (loginErr?.message || '이메일과 비밀번호를 확인해주세요.'));
+        setLoading(false);
+        return;
+      }
 
-    if (data.user) {
+      // profile 조회
       const { data: profile } = await supabase
         .from('users')
         .select('role')
         .eq('auth_id', data.user.id)
         .single();
 
-      router.push(profile?.role === 'admin' ? '/admin' : '/');
+      setLoading(false);
+
+      if (profile?.role === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/');
+      }
+    } catch (e) {
+      setError('오류가 발생했습니다. 다시 시도해주세요.');
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-3xl flex items-center justify-center mx-auto mb-4 text-4xl">
             🎮
@@ -96,12 +103,10 @@ export default function LoginPage() {
           <p className="text-blue-200 text-sm">실시간 게임 & 팀 활동 관리</p>
         </div>
 
-        {/* Card */}
         <div className="bg-white rounded-3xl p-6 shadow-2xl">
-          {/* Tabs */}
           <div className="flex bg-slate-100 rounded-2xl p-1 mb-6">
             <button
-              onClick={() => { setMode('login'); setError(''); }}
+              onClick={() => { setMode('login'); setError(''); setLoading(false); }}
               className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                 mode === 'login' ? 'bg-white shadow text-blue-600' : 'text-slate-500'
               }`}
@@ -109,7 +114,7 @@ export default function LoginPage() {
               로그인
             </button>
             <button
-              onClick={() => { setMode('register'); setError(''); }}
+              onClick={() => { setMode('register'); setError(''); setLoading(false); }}
               className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                 mode === 'register' ? 'bg-white shadow text-blue-600' : 'text-slate-500'
               }`}
@@ -118,14 +123,12 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
               {error}
             </div>
           )}
 
-          {/* Fields */}
           <div className="space-y-3">
             {mode === 'register' && (
               <div>
@@ -176,7 +179,6 @@ export default function LoginPage() {
             )}
           </div>
 
-          {/* Submit */}
           <button
             onClick={mode === 'login' ? handleLogin : handleRegister}
             disabled={loading}
