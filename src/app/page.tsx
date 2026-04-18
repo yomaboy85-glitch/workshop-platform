@@ -78,11 +78,11 @@ export default function HomePage() {
   };
 
   const subscribeToGames = () => {
-    const channel = supabase
-      .channel('games-home')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, fetchData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, fetchData)
-      .subscribe();
+    supabase.removeAllChannels();
+    const channel = supabase.channel('games-home');
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, fetchData);
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, fetchData);
+    channel.subscribe();
     return () => supabase.removeChannel(channel);
   };
 

@@ -64,12 +64,12 @@ export default function TeamPage() {
   };
 
   useEffect(() => {
-    const channel = supabase
-      .channel('team-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, fetchData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, fetchData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, fetchData)
-      .subscribe();
+        supabase.removeAllChannels();
+    const channel = supabase.channel('team-rt');
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, fetchData);
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, fetchData);
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, fetchData);
+    channel.subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [profile]);
 

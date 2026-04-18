@@ -32,10 +32,10 @@ export default function AnnouncementBanner() {
 
   useEffect(() => {
     fetchAnnouncements();
-    const channel = supabase
-      .channel('announcements-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, fetchAnnouncements)
-      .subscribe();
+        supabase.removeAllChannels();
+    const channel = supabase.channel('announcements-rt');
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, fetchAnnouncements);
+    channel.subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 

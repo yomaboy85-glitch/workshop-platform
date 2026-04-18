@@ -16,10 +16,10 @@ export default function PresenceIndicator() {
 
   useEffect(() => {
     fetchOnline();
-    const channel = supabase
-      .channel('presence-indicator')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, fetchOnline)
-      .subscribe();
+        supabase.removeAllChannels();
+    const channel = supabase.channel('presence-indicator');
+    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, fetchOnline);
+    channel.subscribe();
     // Refresh every 30s as heartbeat fallback
     const interval = setInterval(fetchOnline, 30000);
     return () => {

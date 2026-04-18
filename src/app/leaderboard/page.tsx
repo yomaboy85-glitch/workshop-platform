@@ -52,11 +52,11 @@ export default function LeaderboardPage() {
   };
 
   useEffect(() => {
-    const channel = supabase
-      .channel('leaderboard-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, fetchData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, fetchData)
-      .subscribe();
+        supabase.removeAllChannels();
+    const channel = supabase.channel('leaderboard-rt');
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, fetchData);
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, fetchData);
+    channel.subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
