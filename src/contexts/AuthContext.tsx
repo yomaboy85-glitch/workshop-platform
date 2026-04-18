@@ -25,13 +25,9 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({
-  user: null,
-  session: null,
-  profile: null,
-  isAdmin: false,
-  loading: true,
-  signOut: async () => {},
-  refreshProfile: async () => {},
+  user: null, session: null, profile: null,
+  isAdmin: false, loading: true,
+  signOut: async () => {}, refreshProfile: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -41,27 +37,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const profileIdRef = useRef<string | null>(null);
-  const initializedRef = useRef(false);
 
-  const fetchProfile = async (authUser: User) => {
+  const fetchProfile = async (authUser: User): Promise<void> => {
     try {
       const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_id', authUser.id)
-        .single();
+        .from('users').select('*').eq('auth_id', authUser.id).single();
       if (data) {
         setProfile(data as UserProfile);
         profileIdRef.current = data.id;
         supabase.from('users')
           .update({ is_online: true, last_seen: new Date().toISOString() })
-          .eq('id', data.id)
-          .then(() => {});
+          .eq('id', data.id).then(() => {});
         startHeartbeat(data.id);
       }
-    } catch (e) {
-      // profile fetch 실패해도 loading은 해제
-    }
+    } catch (_) {}
   };
 
   const startHeartbeat = (userId: string) => {
@@ -74,20 +63,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const stopHeartbeat = () => {
-    if (heartbeatRef.current) {
-      clearInterval(heartbeatRef.current);
-      heartbeatRef.current = null;
-    }
+    if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
   };
 
-  const refreshProfile = async () => {
-    if (user) await fetchProfile(user);
-  };
+  const refreshProfile = async () => { if (user) await fetchProfile(user); };
 
   useEffect(() => {
-    // onAuthStateChange 하나만 사용 - getSession은 초기값으로만 활용
+    let mounted = true;
+
+    // 1) 먼저 현재 세션 빠르게 가져오기
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchProfile(session.user);
+      }
+      if (mounted) setLoading(false);
+    });
+
+    // 2) 이후 변경사항 감지 (로그인/로그아웃)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        if (!mounted) return;
+        // INITIAL_SESSION은 getSession이 처리하므로 무시
+        if (event === 'INITIAL_SESSION') return;
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -97,40 +97,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null);
           profileIdRef.current = null;
         }
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     );
 
-    // 초기 세션 체크 - onAuthStateChange가 INITIAL_SESSION 이벤트를 처리하므로
-    // 혹시 발화 안 될 경우를 대비해 타임아웃으로 loading 해제
-    const timeout = setTimeout(() => {
-      setLoading(false);
-    }, 3000);
-
-    const handleUnload = () => {
+    window.addEventListener('beforeunload', () => {
       const pid = profileIdRef.current;
-      if (pid) {
-        navigator.sendBeacon?.(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${pid}`,
-          new Blob([JSON.stringify({ is_online: false })], { type: 'application/json' })
-        );
-      }
-    };
-    window.addEventListener('beforeunload', handleUnload);
+      if (pid) navigator.sendBeacon?.(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${pid}`,
+        new Blob([JSON.stringify({ is_online: false })], { type: 'application/json' })
+      );
+    });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
       stopHeartbeat();
-      clearTimeout(timeout);
-      window.removeEventListener('beforeunload', handleUnload);
     };
   }, []);
 
   const signOut = async () => {
     if (profileIdRef.current) {
-      await supabase.from('users')
-        .update({ is_online: false })
-        .eq('id', profileIdRef.current);
+      await supabase.from('users').update({ is_online: false }).eq('id', profileIdRef.current);
     }
     stopHeartbeat();
     await supabase.auth.signOut();
