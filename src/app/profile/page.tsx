@@ -59,7 +59,8 @@ export default function ProfilePage() {
     return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="spinner" /></div>;
+  if (loading && !profile) return <div className="min-h-screen flex items-center justify-center"><div className="spinner" /></div>;
+  if (!profile) return null;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">

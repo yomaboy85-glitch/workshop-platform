@@ -34,18 +34,18 @@ export default function HomePage() {
   const [userScore, setUserScore] = useState(0);
 
   useEffect(() => {
-    if (!loading && !profile) {
+    // loading 완료 후 처리
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    if (!loading && isAdmin) {
+    if (isAdmin) {
       router.push('/admin');
       return;
     }
-    if (profile) {
-      fetchData();
-      subscribeToGames();
-    }
+    fetchData();
+    subscribeToGames();
   }, [profile, loading, isAdmin]);
 
   const fetchData = async () => {
@@ -86,7 +86,8 @@ export default function HomePage() {
     return () => supabase.removeChannel(channel);
   };
 
-  if (loading) {
+  // profile이 없고 로딩중이면 스피너, 아니면 바로 렌더
+  if (loading && !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -96,6 +97,7 @@ export default function HomePage() {
       </div>
     );
   }
+  if (!profile) return null;
 
   const gameTypeLabel: Record<string, string> = {
     quiz: '🧠 퀴즈',
