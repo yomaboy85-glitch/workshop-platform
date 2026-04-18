@@ -41,29 +41,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const profileIdRef = useRef<string | null>(null);
+  const initializedRef = useRef(false);
 
   const fetchProfile = async (authUser: User) => {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('auth_id', authUser.id)
-      .single();
-    if (data) {
-      setProfile(data as UserProfile);
-      profileIdRef.current = data.id;
-      await supabase
+    try {
+      const { data } = await supabase
         .from('users')
-        .update({ is_online: true, last_seen: new Date().toISOString() })
-        .eq('id', data.id);
-      startHeartbeat(data.id);
+        .select('*')
+        .eq('auth_id', authUser.id)
+        .single();
+      if (data) {
+        setProfile(data as UserProfile);
+        profileIdRef.current = data.id;
+        supabase.from('users')
+          .update({ is_online: true, last_seen: new Date().toISOString() })
+          .eq('id', data.id)
+          .then(() => {});
+        startHeartbeat(data.id);
+      }
+    } catch (e) {
+      // profile fetch 실패해도 loading은 해제
     }
   };
 
   const startHeartbeat = (userId: string) => {
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     heartbeatRef.current = setInterval(async () => {
-      await supabase
-        .from('users')
+      await supabase.from('users')
         .update({ is_online: true, last_seen: new Date().toISOString() })
         .eq('id', userId);
     }, HEARTBEAT_MS);
@@ -81,15 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchProfile(session.user);
-      }
-      setLoading(false);
-    });
-
+    // onAuthStateChange 하나만 사용 - getSession은 초기값으로만 활용
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setSession(session);
@@ -105,32 +101,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    // 초기 세션 체크 - onAuthStateChange가 INITIAL_SESSION 이벤트를 처리하므로
+    // 혹시 발화 안 될 경우를 대비해 타임아웃으로 loading 해제
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+
     const handleUnload = () => {
       const pid = profileIdRef.current;
       if (pid) {
-        // Use sendBeacon to fire-and-forget (works on page close)
-        const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${pid}`;
-        const data = JSON.stringify({ is_online: false });
-        if (typeof navigator.sendBeacon === 'function') {
-          navigator.sendBeacon(url, new Blob([data], { type: 'application/json' }));
-        }
+        navigator.sendBeacon?.(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${pid}`,
+          new Blob([JSON.stringify({ is_online: false })], { type: 'application/json' })
+        );
       }
     };
-
     window.addEventListener('beforeunload', handleUnload);
 
     return () => {
       subscription.unsubscribe();
       stopHeartbeat();
+      clearTimeout(timeout);
       window.removeEventListener('beforeunload', handleUnload);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signOut = async () => {
     if (profileIdRef.current) {
-      await supabase
-        .from('users')
+      await supabase.from('users')
         .update({ is_online: false })
         .eq('id', profileIdRef.current);
     }
