@@ -40,8 +40,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (authUser: User): Promise<void> => {
     try {
-      const { data } = await supabase
-        .from('users').select('*').eq('auth_id', authUser.id).single();
+      let { data } = await supabase
+        .from('users').select('*').eq('auth_id', authUser.id).maybeSingle();
+
+      // auth는 있는데 public.users row가 없는 "반쪽 계정" 자동 복구
+      if (!data) {
+        const fallbackName = (authUser.user_metadata?.name as string)
+          || authUser.email?.split('@')[0]
+          || '사용자';
+        const { data: created } = await supabase
+          .from('users')
+          .insert({
+            auth_id: authUser.id,
+            name: fallbackName,
+            role: 'user',
+            is_online: true,
+          })
+          .select('*')
+          .maybeSingle();
+        data = created;
+      }
+
       if (data) {
         setProfile(data as UserProfile);
         profileIdRef.current = data.id;
@@ -71,16 +90,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    // 어떤 상황에서도 5초 내에 loading=false 보장 (스피너 무한 대기 방지)
+    const safetyTimer = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 5000);
+
     // 1) 먼저 현재 세션 빠르게 가져오기
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchProfile(session.user);
+      try {
+        if (session?.user) await fetchProfile(session.user);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      if (mounted) setLoading(false);
-    });
+    }).catch(() => { if (mounted) setLoading(false); });
 
     // 2) 이후 변경사항 감지 (로그인/로그아웃)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -90,14 +115,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'INITIAL_SESSION') return;
         setSession(session);
         setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchProfile(session.user);
-        } else {
-          stopHeartbeat();
-          setProfile(null);
-          profileIdRef.current = null;
+        try {
+          if (session?.user) {
+            await fetchProfile(session.user);
+          } else {
+            stopHeartbeat();
+            setProfile(null);
+            profileIdRef.current = null;
+          }
+        } finally {
+          if (mounted) setLoading(false);
         }
-        if (mounted) setLoading(false);
       }
     );
 
@@ -111,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
       stopHeartbeat();
     };

@@ -141,7 +141,7 @@ export default function QuizGamePage() {
 
     if (isCorrect && score > 0) {
       const { data: tm } = await supabase
-        .from('team_members').select('team_id').eq('user_id', profile.id).single();
+        .from('team_members').select('team_id').eq('user_id', profile.id).maybeSingle();
       await supabase.from('scores').insert({
         user_id: profile.id,
         team_id: tm?.team_id || null,

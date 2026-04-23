@@ -81,7 +81,7 @@ export default function MissionGamePage() {
     }
 
     const { data: tm } = await supabase
-      .from('team_members').select('team_id').eq('user_id', profile.id).single();
+      .from('team_members').select('team_id').eq('user_id', profile.id).maybeSingle();
 
     await supabase.from('scores').insert({
       user_id: profile.id,

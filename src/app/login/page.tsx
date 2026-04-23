@@ -72,12 +72,12 @@ export default function LoginPage() {
         return;
       }
 
-      // profile 조회
+      // profile 조회 (role 확인용). 없어도 진행 — AuthContext가 자동 생성함
       const { data: profile } = await supabase
         .from('users')
         .select('role')
         .eq('auth_id', data.user.id)
-        .single();
+        .maybeSingle();
 
       setLoading(false);
 

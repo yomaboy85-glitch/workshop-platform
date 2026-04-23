@@ -59,12 +59,12 @@ export default function HomePage() {
       .order('created_at', { ascending: false });
     if (gamesData) setGames(gamesData);
 
-    // Fetch team info
+    // Fetch team info (팀 미배정 유저는 row 없음 → maybeSingle 사용)
     const { data: tmData } = await supabase
       .from('team_members')
       .select('teams(name, color)')
       .eq('user_id', profile.id)
-      .single();
+      .maybeSingle();
     if (tmData?.teams) setTeamInfo(tmData.teams as unknown as TeamInfo);
 
     // Fetch user score

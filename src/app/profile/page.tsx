@@ -39,7 +39,7 @@ export default function ProfilePage() {
         .from('team_members')
         .select('teams(name)')
         .eq('user_id', profile.id)
-        .single(),
+        .maybeSingle(),
     ]);
 
     if (scoreData) {
