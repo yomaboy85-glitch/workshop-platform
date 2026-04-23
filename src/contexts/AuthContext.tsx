@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const fallbackName = (authUser.user_metadata?.name as string)
           || authUser.email?.split('@')[0]
           || '사용자';
-        const { data: created } = await supabase
+        const { data: created, error: insertErr } = await supabase
           .from('users')
           .insert({
             auth_id: authUser.id,
@@ -58,7 +58,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
           .select('*')
           .maybeSingle();
-        data = created;
+
+        if (created) {
+          data = created;
+        } else if (insertErr) {
+          // 중복 키 등 insert 실패 → 다른 요청이 이미 만들었을 수 있으니 재조회
+          const retry = await supabase
+            .from('users').select('*').eq('auth_id', authUser.id).maybeSingle();
+          data = retry.data;
+        }
       }
 
       if (data) {
@@ -107,26 +115,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }).catch(() => { if (mounted) setLoading(false); });
 
-    // 2) 이후 변경사항 감지 (로그인/로그아웃)
+    // 2) 이후 변경사항 감지 (로그인/로그아웃만 처리)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
-        // INITIAL_SESSION은 getSession이 처리하므로 무시
-        if (event === 'INITIAL_SESSION') return;
+        // INITIAL_SESSION: getSession이 처리. TOKEN_REFRESHED/USER_UPDATED: 프로필 재조회 불필요
+        if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT') return;
         setSession(session);
         setUser(session?.user ?? null);
-        // 프로필 재조회 동안 보호 라우트가 /login으로 튕기지 않도록 loading=true
-        if (session?.user) setLoading(true);
-        try {
-          if (session?.user) {
+        if (event === 'SIGNED_IN' && session?.user) {
+          setLoading(true);
+          try {
             await fetchProfile(session.user);
-          } else {
-            stopHeartbeat();
-            setProfile(null);
-            profileIdRef.current = null;
+          } finally {
+            if (mounted) setLoading(false);
           }
-        } finally {
-          if (mounted) setLoading(false);
+        } else if (event === 'SIGNED_OUT') {
+          stopHeartbeat();
+          setProfile(null);
+          profileIdRef.current = null;
+          setLoading(false);
         }
       }
     );
