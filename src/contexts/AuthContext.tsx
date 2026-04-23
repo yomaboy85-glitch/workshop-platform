@@ -90,10 +90,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // 어떤 상황에서도 5초 내에 loading=false 보장 (스피너 무한 대기 방지)
+    // Supabase 콜드 스타트 대비 20초 안전장치 (스피너 무한 대기 방지)
     const safetyTimer = setTimeout(() => {
       if (mounted) setLoading(false);
-    }, 5000);
+    }, 20000);
 
     // 1) 먼저 현재 세션 빠르게 가져오기
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -115,6 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'INITIAL_SESSION') return;
         setSession(session);
         setUser(session?.user ?? null);
+        // 프로필 재조회 동안 보호 라우트가 /login으로 튕기지 않도록 loading=true
+        if (session?.user) setLoading(true);
         try {
           if (session?.user) {
             await fetchProfile(session.user);

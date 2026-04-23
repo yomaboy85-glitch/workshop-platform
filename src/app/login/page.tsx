@@ -64,28 +64,17 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const { data, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
+      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
 
-      if (loginErr || !data.user) {
-        setError('로그인 실패: ' + (loginErr?.message || '이메일과 비밀번호를 확인해주세요.'));
+      if (loginErr) {
+        setError('로그인 실패: ' + (loginErr.message || '이메일과 비밀번호를 확인해주세요.'));
         setLoading(false);
         return;
       }
 
-      // profile 조회 (role 확인용). 없어도 진행 — AuthContext가 자동 생성함
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('auth_id', data.user.id)
-        .maybeSingle();
-
+      // profile 조회는 AuthContext가 담당. 홈으로 바로 이동 (admin이면 홈에서 /admin으로 리다이렉트됨)
       setLoading(false);
-
-      if (profile?.role === 'admin') {
-        router.push('/admin');
-      } else {
-        router.push('/');
-      }
+      router.push('/');
     } catch (e) {
       setError('오류가 발생했습니다. 다시 시도해주세요.');
       setLoading(false);
